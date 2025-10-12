@@ -31,6 +31,9 @@ jobs:
     env:
       GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
       LZC_CLI_TOKEN: "${{ secrets.LZC_CLI_TOKEN }}"
+      LZC_CI_DOCKER_IMAGE: "wisdomsky/cloudflared-web"
+      LZC_CI_LPK_PACKAGE: "dev.libr.cloudflared"
+      LZC_CI_SVR_IMAGE_TAG_RULE: ".services.cloudflared.mark"
 
     steps:
       - name: Checkout
@@ -63,14 +66,14 @@ jobs:
         run: "npm install -g @lazycatcloud/lzc-cli && npx -y lzc-cli --version"
 
       - name: Build LPK
-        run: "npx -y lzc-cli project build --output cloud.lazycat.app.netatalk-${{ hashFiles('**/lzc-manifest.yml') }}.lpk"
+        run: "npx -y lzc-cli project build --output ${{ env.LZC_CI_LPK_PACKAGE }}-${{ hashFiles('**/lzc-manifest.yml') }}.lpk"
 
       - name: "Upload Artifact"
         id: artifact-upload-step
         uses: actions/upload-artifact@v4
         with:
-          name: cloud.lazycat.app.netatalk-${{ hashFiles('**/lzc-manifest.yml') }}.lpk
-          path: "**/cloud.lazycat.app.netatalk-**.lpk"
+          name: ${{ env.LZC_CI_LPK_PACKAGE }}-${{ hashFiles('**/lzc-manifest.yml') }}.lpk
+          path: "**/${{ env.LZC_CI_LPK_PACKAGE }}-**.lpk"
           retention-days: 5
 
       - name: Output artifact ID and Url
@@ -88,15 +91,15 @@ jobs:
 
             ```sh
             # install and test
-            lzc-cli app install cloud.lazycat.app.netatalk-${{ hashFiles('**/lzc-manifest.yml') }}.lpk
+            lzc-cli app install ${{ env.LZC_CI_LPK_PACKAGE }}-${{ hashFiles('**/lzc-manifest.yml') }}.lpk
             ```
 
-      - name: Get netatalk latest version
+      - name: Get docker image latest version
         id: image_version
         uses: mikefarah/yq@master
         if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
-          cmd: yq '.services.netatalk.mark' lzc-manifest.yml
+          cmd: yq '${{ env.LZC_CI_SVR_IMAGE_TAG_RULE }}' lzc-manifest.yml
 
       - name: Generate release changelog
         id: changelog_content
@@ -115,7 +118,7 @@ jobs:
       - name: Copy Release File
         if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
-          cp "cloud.lazycat.app.netatalk-${{ hashFiles('**/lzc-manifest.yml') }}.lpk" "cloud.lazycat.app.netatalk-${{ steps.lpk_version.outputs.version }}.lpk"
+          cp "${{ env.LZC_CI_LPK_PACKAGE }}-${{ hashFiles('**/lzc-manifest.yml') }}.lpk" "${{ env.LZC_CI_LPK_PACKAGE }}-${{ steps.lpk_version.outputs.version }}.lpk"
 
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -124,13 +127,13 @@ jobs:
           draft: false
           prerelease: false
           make_latest: true
-          body: "${{ steps.changelog_content.outputs.content }}\n###💼 Other\n- [update] bump netatalk/netatalk docker image v${{ steps.image_version.outputs.result }}"
+          body: "${{ steps.changelog_content.outputs.content }}\n\n### 💼 Other\n\n- [update] bump ${{ env.LZC_CI_DOCKER_IMAGE }} docker image ${{ steps.image_version.outputs.result }}"
           files: |
-            cloud.lazycat.app.netatalk-${{ steps.lpk_version.outputs.version }}.lpk
+            ${{ env.LZC_CI_LPK_PACKAGE }}-${{ steps.lpk_version.outputs.version }}.lpk
 
     # bin: 该应用属于自用，无须上架应用商店，所以禁用上架流程
     #   - name: Publish LPK file to appstore
     #     if: github.event_name == 'push' && github.ref_type == 'tag'
-    #     run: npx -y lzc-cli appstore publish --changelog "[update] bump netatalk/netatalk image v${{ steps.image_version.outputs.result }}" cloud.lazycat.app.netatalk-${{ hashFiles('**/lzc-manifest.yml') }}.lpk
+    #     run: npx -y lzc-cli appstore publish --changelog "[update] bump ${{ env.LZC_CI_DOCKER_IMAGE }} image v${{ steps.image_version.outputs.result }}" ${{ env.LZC_CI_LPK_PACKAGE }}-${{ hashFiles('**/lzc-manifest.yml') }}.lpk
     #     env:
     #       LC_ALL: zh_CN # lzc-cil https://yargs.js.org/docs/#api-reference-localelocale
